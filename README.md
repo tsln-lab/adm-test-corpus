@@ -1,5 +1,14 @@
 # adm-test-corpus
-ADM QC materials from https://qc.ebu.io/testmaterials/?path=/ADM/
+ADM test material for [libear-max](https://github.com/tsln-lab/libear-max),
+as release assets:
+
+- `v1.0.0`: the EBU's ADM QC materials from
+  <https://qc.ebu.io/testmaterials/?path=/ADM/>, unmodified
+- `netflix-v1.0.0`: the first 60 seconds of Netflix's Dolby Atmos master
+  ADM files for *Meridian*, *Nocturne* and *Sol Levante*, from
+  <https://opencontent.netflix.com/>, trimmed with the tool below
+
+Both are CC BY 4.0; see [ATTRIBUTION.md](ATTRIBUTION.md).
 
 ## Trimming large files
 
