@@ -69,16 +69,20 @@ def trim(src, dst, seconds):
     resolve, a fmt chunk that is not PCM or whose block alignment is not
     one frame, or a data chunk before the fmt chunk.
     """
-    riff_id, _riff_size, form = struct.unpack("<4sI4s", read_exact(src, 12))
+    riff_id, riff_size, form = struct.unpack("<4sI4s", read_exact(src, 12))
     if riff_id not in (b"RIFF", b"RF64", b"BW64") or form != b"WAVE":
         raise SystemExit("not a WAVE file")
+    # chunks are read up to the container's declared end, so bytes after it
+    # are not taken for chunks; a size of 0 (some writers never fill it in)
+    # or the sentinel (resolved by ds64) means the end of the file
+    riff_end = 8 + riff_size if riff_id == b"RIFF" and riff_size not in (0, SENTINEL) else None
     # 64-bit sizes from ds64, one list per chunk id in file order: each
     # chunk whose header carries the sentinel takes the next one for its id
     sizes = {}
     fmt = None
     kept_frames = None
     dst.write(struct.pack("<4sI4s", b"RIFF", 0, b"WAVE"))
-    while True:
+    while riff_end is None or src.tell() < riff_end:
         header = src.read(8)
         if not header:
             break
@@ -93,7 +97,9 @@ def trim(src, dst, seconds):
             if size > HEADER_CHUNK_LIMIT or size < 28:
                 raise SystemExit(f"ds64 chunk of {size} bytes is not plausible")
             body = read_exact(src, size)
-            _riff_size64, data_size64, _sample_count, table_length = struct.unpack("<QQQI", body[:28])
+            riff_size64, data_size64, _sample_count, table_length = struct.unpack("<QQQI", body[:28])
+            if riff_size64:
+                riff_end = 8 + riff_size64
             if 28 + 12 * table_length > size:
                 raise SystemExit("ds64 chunk is shorter than its table")
             sizes.setdefault(b"data", []).append(data_size64)
