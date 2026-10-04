@@ -8,7 +8,8 @@ as release assets:
   ADM files for *Meridian*, *Nocturne* and *Sol Levante*, from
   <https://opencontent.netflix.com/>, trimmed with the tool below
 
-Both are CC BY 4.0; see [ATTRIBUTION.md](ATTRIBUTION.md).
+The source, licence and changes of each release are in
+[ATTRIBUTION.md](ATTRIBUTION.md); the Netflix material is CC BY 4.0.
 
 ## Trimming large files
 

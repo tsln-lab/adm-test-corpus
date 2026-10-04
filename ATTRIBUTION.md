@@ -5,7 +5,8 @@ release assets, so that the libear-max test suite and its continuous
 integration can fetch them from one stable place: the EBU's ADM test
 materials (release `v1.0.0`, unmodified) and excerpts of Netflix's Dolby
 Atmos master ADM files (release `netflix-v1.0.0`, trimmed as described
-below). Both are licensed under CC BY 4.0.
+below). Each section below gives the source, the licence and the changes
+made for its release.
 
 # The EBU's ADM test materials (release v1.0.0)
 
@@ -66,11 +67,13 @@ this repository or libear-max.
 
 The files are adaptations of the originals: each was trimmed to its first
 60 seconds of audio with `tools/trim_bw64.py` of this repository, which
-keeps the first seconds of the `data` chunk and copies every other chunk
-verbatim, so the ADM metadata (`axml`), the track mapping (`chna`) and
-Dolby's `dbmd` chunk are those of the full master and describe the whole
-programme. The RF64 originals became plain RIFF files, and the assets were
-renamed to `meridian.wav`, `nocturne.wav` and `sollevante.wav`.
+keeps the first seconds of the `data` chunk and copies the contents of
+every other chunk unchanged, so the ADM metadata (`axml`), the track
+mapping (`chna`) and Dolby's `dbmd` chunk are those of the full master and
+describe the whole programme. The RF64 originals became plain RIFF files,
+whose sizes fit the RIFF header, so the `ds64` chunk that carried the
+64-bit sizes is not written; and the assets were renamed to
+`meridian.wav`, `nocturne.wav` and `sollevante.wav`.
 
 | Asset | Original file |
 | --- | --- |
