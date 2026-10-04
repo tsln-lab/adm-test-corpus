@@ -26,6 +26,9 @@ CHUNK_COPY = 1 << 20
 # ds64 and fmt are read whole; anything larger than this is not one of them
 HEADER_CHUNK_LIMIT = 1 << 20
 SENTINEL = 0xFFFFFFFF
+# WAVE_FORMAT_PCM, WAVE_FORMAT_IEEE_FLOAT, WAVE_FORMAT_EXTENSIBLE (whose
+# sub-format is PCM or float in a BWF)
+PCM_FORMATS = (0x0001, 0x0003, 0xFFFE)
 
 
 def read_exact(f, n):
@@ -58,8 +61,8 @@ def trim(src, dst, seconds):
 
     Returns the size of the written file. Raises SystemExit on malformed
     input: a short chunk header, a 64-bit size the ds64 chunk does not
-    resolve, a fmt chunk that gives no block alignment, or a data chunk
-    before the fmt chunk.
+    resolve, a fmt chunk that is not PCM or whose block alignment is not
+    one frame, or a data chunk before the fmt chunk.
     """
     riff_id, _riff_size, form = struct.unpack("<4sI4s", read_exact(src, 12))
     if riff_id not in (b"RIFF", b"RF64", b"BW64") or form != b"WAVE":
@@ -100,8 +103,13 @@ def trim(src, dst, seconds):
                 raise SystemExit(f"fmt chunk of {size} bytes is not plausible")
             body = read_exact(src, size)
             fmt = struct.unpack("<HHIIHH", body[:16])
-            if fmt[4] == 0:
-                raise SystemExit("fmt chunk gives a block alignment of 0")
+            format_tag, channels, _rate, _bytes_per_second, block_align, bits = fmt
+            # only PCM and float, where a block is one frame of samples;
+            # a compressed format's block is an encoded block of many frames
+            if format_tag not in PCM_FORMATS:
+                raise SystemExit(f"format tag 0x{format_tag:04x} is not PCM or float; only those can be trimmed by frames")
+            if channels == 0 or bits == 0 or block_align != channels * ((bits + 7) // 8):
+                raise SystemExit(f"block alignment {block_align} is not one frame of {channels} channels at {bits} bits")
             dst.write(header + body)
             if size & 1:
                 dst.write(read_exact(src, 1))
@@ -156,10 +164,14 @@ def main():
         raise SystemExit(f"{args.input}: {e.strerror}")
     with src:
         try:
-            with open(args.output, "wb") as dst:
+            dst = open(args.output, "wb")
+        except OSError as e:
+            raise SystemExit(f"{args.output}: {e.strerror}")
+        try:
+            with dst:
                 total = trim(src, dst, args.seconds)
         except BaseException:
-            # leave no partial output behind
+            # this run created the output: leave no partial file behind
             try:
                 os.remove(args.output)
             except OSError:
