@@ -21,14 +21,19 @@ import math
 import os
 import struct
 import sys
+import tempfile
 
 CHUNK_COPY = 1 << 20
 # ds64 and fmt are read whole; anything larger than this is not one of them
 HEADER_CHUNK_LIMIT = 1 << 20
 SENTINEL = 0xFFFFFFFF
-# WAVE_FORMAT_PCM, WAVE_FORMAT_IEEE_FLOAT, WAVE_FORMAT_EXTENSIBLE (whose
-# sub-format is PCM or float in a BWF)
-PCM_FORMATS = (0x0001, 0x0003, 0xFFFE)
+# WAVE_FORMAT_PCM and WAVE_FORMAT_IEEE_FLOAT, as a format tag or as the
+# first two bytes of a WAVE_FORMAT_EXTENSIBLE sub-format GUID
+PCM_FORMATS = (0x0001, 0x0003)
+EXTENSIBLE = 0xFFFE
+# the 14 bytes that follow the tag in the sub-format GUID of the formats
+# registered by Microsoft, 0000xxxx-0000-0010-8000-00aa00389b71, as stored
+SUBFORMAT_TAIL = bytes.fromhex("0000" + "0000" + "1000" + "800000aa00389b71")
 
 
 def read_exact(f, n):
@@ -106,7 +111,15 @@ def trim(src, dst, seconds):
             format_tag, channels, _rate, _bytes_per_second, block_align, bits = fmt
             # only PCM and float, where a block is one frame of samples;
             # a compressed format's block is an encoded block of many frames
-            if format_tag not in PCM_FORMATS:
+            if format_tag == EXTENSIBLE:
+                # 16 bytes of WAVEFORMATEX, cbSize, 22 bytes of extension
+                # ending in the sub-format GUID
+                if size < 40 or struct.unpack("<H", body[16:18])[0] < 22:
+                    raise SystemExit("extensible fmt chunk is too short to carry a sub-format")
+                sub_tag = struct.unpack("<H", body[24:26])[0]
+                if sub_tag not in PCM_FORMATS or body[26:40] != SUBFORMAT_TAIL:
+                    raise SystemExit(f"extensible sub-format {body[24:40].hex()} is not PCM or float; only those can be trimmed by frames")
+            elif format_tag not in PCM_FORMATS:
                 raise SystemExit(f"format tag 0x{format_tag:04x} is not PCM or float; only those can be trimmed by frames")
             if channels == 0 or bits == 0 or block_align != channels * ((bits + 7) // 8):
                 raise SystemExit(f"block alignment {block_align} is not one frame of {channels} channels at {bits} bits")
@@ -147,7 +160,12 @@ def trim(src, dst, seconds):
 
 
 def main():
-    """Parse the command line and trim the file, removing the output on failure."""
+    """Parse the command line and trim the file.
+
+    The output is written to a temporary file beside its final path and
+    moved into place once the trim succeeds, so a failed run leaves
+    whatever was at the output path untouched and no partial file behind.
+    """
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("input")
     parser.add_argument("output")
@@ -162,18 +180,20 @@ def main():
         src = open(args.input, "rb")
     except OSError as e:
         raise SystemExit(f"{args.input}: {e.strerror}")
+    out_dir = os.path.dirname(os.path.abspath(args.output))
+    out_name = os.path.basename(args.output)
     with src:
         try:
-            dst = open(args.output, "wb")
+            dst = tempfile.NamedTemporaryFile(mode="wb", dir=out_dir, prefix=out_name + ".", suffix=".part", delete=False)
         except OSError as e:
             raise SystemExit(f"{args.output}: {e.strerror}")
         try:
             with dst:
                 total = trim(src, dst, args.seconds)
+            os.replace(dst.name, args.output)
         except BaseException:
-            # this run created the output: leave no partial file behind
             try:
-                os.remove(args.output)
+                os.remove(dst.name)
             except OSError:
                 pass
             raise
